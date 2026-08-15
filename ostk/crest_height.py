@@ -104,10 +104,17 @@ def crest_height_from_label(label, affine, label_ids: Dict[str, int], *,
     """Per-case crest-height measurement: for each side, the iliac-crest apex
     classified against the L4/L5 body spans, plus a continuous height (mm,
     signed +cranial) measured from the L4-L5 disc-space midpoint, and the
-    left-right obliquity (mm, |right height - left height|).
+    left-right obliquity (mm, |right apex z - left apex z|).
 
-    Never silently drops a bad case: missing/small inputs -> that side's
-    level/height stay None plus a qc_flags entry, mirroring the rest of ostk
+    Obliquity is computed from the two apex points ALONE (the disc-midpoint
+    reference cancels out of that subtraction), so it's still reported when
+    L4 and/or L5 is missing/unfittable -- e.g. an LSTV sacralization case
+    with no separate L5 body. Per-side level/height DO need both vertebral
+    spans (there's no body to classify against otherwise), so those stay
+    None with a qc_flags entry in that case.
+
+    Never silently drops a bad case: missing/small inputs -> the affected
+    field(s) stay None plus a qc_flags entry, mirroring the rest of ostk
     (SPEC §4) — not an exception.
     """
     a = unit(sup_axis)
@@ -132,31 +139,33 @@ def crest_height_from_label(label, affine, label_ids: Dict[str, int], *,
         "supine_ct": True,
     }
 
-    if l4_span is None or l5_span is None:
-        flags.append("insufficient_input")
-        return result
-
-    disc_z = 0.5 * (l4_span[0] + l5_span[1])  # midpoint of the L4-L5 disc space
-    landmarks["l4_l5_disc_ref_z"] = [float(disc_z)]
-
-    heights: Dict[str, float] = {}
+    apex_z: Dict[str, float] = {}
     for side in ("right", "left"):
         apex, n_vox = crest_apex_from_label(label, affine, side, label_ids,
                                             sup_axis=sup_axis, min_voxels=min_voxels)
         if apex is None:
             flags.append(f"low_voxels:{side}_hip")
             continue
-        apex_z = float(apex @ a)
-        height_mm = apex_z - disc_z
-        result[side] = {
-            "level": classify_crest_level(apex_z, l4_span, l5_span),
-            "height_mm": round(height_mm, 3),
-        }
+        apex_z[side] = float(apex @ a)
         landmarks[f"{side}_crest_apex"] = apex.tolist()
-        heights[side] = height_mm
 
-    if "right" in heights and "left" in heights:
-        result["obliquity_mm"] = round(abs(heights["right"] - heights["left"]), 3)
+    if "right" in apex_z and "left" in apex_z:
+        result["obliquity_mm"] = round(abs(apex_z["right"] - apex_z["left"]), 3)
+
+    if l4_span is None or l5_span is None:
+        flags.append("insufficient_input_for_level")
+        if not flags:
+            flags.append("ok")
+        return result
+
+    disc_z = 0.5 * (l4_span[0] + l5_span[1])  # midpoint of the L4-L5 disc space
+    landmarks["l4_l5_disc_ref_z"] = [float(disc_z)]
+
+    for side, z in apex_z.items():
+        result[side] = {
+            "level": classify_crest_level(z, l4_span, l5_span),
+            "height_mm": round(z - disc_z, 3),
+        }
 
     if not flags:
         flags.append("ok")
