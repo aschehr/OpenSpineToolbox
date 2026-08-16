@@ -1,0 +1,5 @@
+Statistic,Value,Detail
+"Pearson r (obliquity, n=10)",0.9936,"p = 7.44e-09, df = 8"
+"ICC(2,1) (obliquity, n=10)",0.9885,"two-way random, absolute agreement"
+"Mean bias, auto - manual (mm)",-0.627,"95% CI [-1.306, 0.053]"
+"Cohen's kappa (level, n=20 sides)",0.9043,observed agreement 95.0% (19/20)
