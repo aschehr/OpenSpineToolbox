@@ -53,10 +53,15 @@ def femoral_head_center(label, affine, femur_name, hip_name=None, *,
          whole head while rejecting the neck/shaft — the same off-surface rejection
          the endplate fit uses for osteophytes.
     Falls back to a robust cranial-slab fit when the hip mask is absent/too small.
+    `femur_name`/`hip_name` accept either a v3 structure name (resolved via
+    `ostk.labels.lid`, existing behaviour) or an already-resolved int id —
+    the latter for callers on a dataset revision with a different id scheme
+    (e.g. real v4 data, which renumbers everything relative to `ostk.labels`).
     Returns (centre, radius, rms) or None."""
     from .labels import lid, LABELS
     from .masks import binary_mask, largest_component, mask_world, surface_slab
-    fem = mask_world(largest_component(binary_mask(label, lid(femur_name))), affine)
+    fem_id = femur_name if isinstance(femur_name, int) else lid(femur_name)
+    fem = mask_world(largest_component(binary_mask(label, fem_id)), affine)
     if len(fem) < min_voxels:
         return None
 
@@ -78,8 +83,9 @@ def femoral_head_center(label, affine, femur_name, hip_name=None, *,
         return c, r, rms
 
     seed = None
-    if hip_name and hip_name in LABELS:
-        hipm = binary_mask(label, lid(hip_name))
+    if hip_name and (isinstance(hip_name, int) or hip_name in LABELS):
+        hip_id = hip_name if isinstance(hip_name, int) else lid(hip_name)
+        hipm = binary_mask(label, hip_id)
         if hipm.any():
             hip = mask_world(hipm, affine)
             try:
