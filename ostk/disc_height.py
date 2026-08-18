@@ -3,42 +3,23 @@ LLIF level selection and collapse/degeneration assessment.
 
 Unlike `endplate_footprint` (which needed a new body-isolation step because
 transverse processes contaminate a raw width measurement), disc height
-needs no new geometry: it's exactly what `spine.endplate_corners` was
-already built and validated for (PI/LL/crest-height all depend on it) — the
-anterior/posterior cortical corners of the disc-facing endplate surface.
-Anterior height = distance between the two surfaces' anterior corners;
-posterior height = same at the posterior corners; middle height = distance
-between the two surfaces' corner-chord midpoints (matches
-`spine.fit_endplate`'s own `mid = 0.5*(A+Pc)`, so results are consistent
-with the endplate plane the rest of the toolbox already fits).
+needs no new geometry: it's exactly what `spine.endplate_corner_landmarks`
+(anterior/posterior cortical corners of the disc-facing endplate surface)
+was already built for. Anterior height = vertical gap between the two
+surfaces' anterior corners; posterior height = same at the posterior
+corners; middle height = same at the corner-chord midpoints.
 
 Label ids are passed explicitly, not `ostk.labels.lid()` — see
 `crest_height.py`'s docstring for why (the real v4 dataset renumbers ids).
 """
 from __future__ import annotations
 
-from typing import Dict, Optional
-
-import numpy as np
+from typing import Dict
 
 from .geometry import WORLD_SUPERIOR, unit
-from .masks import binary_mask, largest_component, mask_world
-from .spine import corner_params_for_level, endplate_corners
+from .spine import endplate_corner_landmarks
 
 METHOD_VERSION = "disc-height-v1"
-
-
-def _endplate_landmarks(label, affine, level: str, which: str,
-                        label_ids: Dict[str, int], sup_axis, lr) -> Optional[Dict]:
-    m = largest_component(binary_mask(label, label_ids[level]))
-    if not m.any():
-        return None
-    pts = mask_world(m, affine)
-    res = endplate_corners(pts, sup_axis, which, lr=lr, **corner_params_for_level(level))
-    if res is None:
-        return None
-    A, Pc, _body = res
-    return {"anterior_corner": A, "posterior_corner": Pc, "mid": 0.5 * (A + Pc)}
 
 
 def disc_height_from_label(label, affine, upper_level: str, lower_level: str,
@@ -53,10 +34,12 @@ def disc_height_from_label(label, affine, upper_level: str, lower_level: str,
     Never silently drops a bad case: missing/unfittable input -> the
     affected field(s) stay None plus a qc_flags entry (SPEC §4)."""
     flags: list = []
-    upper = _endplate_landmarks(label, affine, upper_level, "inferior", label_ids, sup_axis, lr)
+    upper = endplate_corner_landmarks(label, affine, upper_level, "inferior", label_ids,
+                                      sup_axis=sup_axis, lr=lr)
     if upper is None:
         flags.append(f"missing_label:{upper_level}")
-    lower = _endplate_landmarks(label, affine, lower_level, "superior", label_ids, sup_axis, lr)
+    lower = endplate_corner_landmarks(label, affine, lower_level, "superior", label_ids,
+                                      sup_axis=sup_axis, lr=lr)
     if lower is None:
         flags.append(f"missing_label:{lower_level}")
 

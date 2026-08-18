@@ -269,3 +269,35 @@ def endplate_from_label(label, affine, level: str, which: str = "superior",
     pts = mask_world(largest_component(m), affine)
     return fit_endplate(pts, normal_axis, which, method=method, ap_band=ap_band,
                         lr=lr, min_points=min_points, **corner_params_for_level(level))
+
+
+def endplate_corner_landmarks(label, affine, level: str, which: str, label_ids: dict, *,
+                              sup_axis=WORLD_SUPERIOR, lr=(1.0, 0.0, 0.0)):
+    """Anterior/posterior corners, their midpoint, and the endplate normal
+    for one vertebral endplate, straight from a label volume + an EXPLICIT
+    `label_ids` map (see `crest_height.py`'s docstring for why: the real v4
+    dataset renumbers ids relative to what `ostk.labels`/`lid()` encodes).
+
+    The normal is derived from the same two corners (`n = unit(cross(lr,
+    Pc-A))`, oriented cranially for 'superior') rather than a second fit
+    call, so it's guaranteed identical to what `fit_endplate(method='corner')`
+    would produce from the same corners. Shared by `disc_height.py`,
+    `vertebral_wedging.py`, and `coronal_alignment.py` so the corner-finding
+    logic (and its per-level body-isolation params) stays in one place.
+
+    Returns {"anterior_corner","posterior_corner","mid","normal"} (world mm
+    / unit vector) or None if the level is absent/unfittable."""
+    from .masks import binary_mask, largest_component, mask_world
+    m = largest_component(binary_mask(label, label_ids[level]))
+    if not m.any():
+        return None
+    pts = mask_world(m, affine)
+    res = endplate_corners(pts, sup_axis, which, lr=lr, **corner_params_for_level(level))
+    if res is None:
+        return None
+    A, Pc, _body = res
+    n = unit(np.cross(unit(lr), unit(Pc - A)))
+    a = unit(sup_axis)
+    if (which == "superior") != (n @ a >= 0):
+        n = -n
+    return {"anterior_corner": A, "posterior_corner": Pc, "mid": 0.5 * (A + Pc), "normal": n}

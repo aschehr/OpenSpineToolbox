@@ -44,7 +44,8 @@ def _lr_axis(label, affine, label_ids: Dict[str, int], sup_axis, head_frac, min_
 def vertebral_axial_rotation_from_label(label, affine, level: str, label_ids: Dict[str, int], *,
                                         case_id: str = "", sup_axis=WORLD_SUPERIOR,
                                         head_frac: float = 0.35, min_voxels: int = 50,
-                                        erosion_mm: float = 10.0) -> Dict:
+                                        erosion_mm: float = 10.0, lr=None,
+                                        body_mask=None) -> Dict:
     """Axial rotation (degrees) of `level`'s vertebral body: the angle
     between the body's own transverse (long) axis, found by 2-D PCA of the
     body-isolated point cloud projected into the axial plane, and the
@@ -52,10 +53,19 @@ def vertebral_axial_rotation_from_label(label, affine, level: str, label_ids: Di
     anteriorly (right-hand rule about the cranial axis). Folded to (-90, 90]
     since an AXIS (not a directed vector) has 180-degree ambiguity.
 
+    `lr`: optional precomputed patient L-R axis (from `_lr_axis`). `body_mask`:
+    optional precomputed, already-isolated body mask (from
+    `isolate_vertebral_body`). Pass either when calling for multiple levels/
+    parameters on the SAME case (e.g. `llif.llif_level_report_from_label`,
+    which also needs the body mask for `endplate_footprint`) so the
+    expensive femoral-head fit / erosion isn't redundantly recomputed each
+    time. Both None (default) computes them.
+
     Never silently drops a bad case: missing/unfittable input -> value None
     plus a qc_flags entry (SPEC §4)."""
     flags: list = []
-    lr = _lr_axis(label, affine, label_ids, sup_axis, head_frac, min_voxels)
+    if lr is None:
+        lr = _lr_axis(label, affine, label_ids, sup_axis, head_frac, min_voxels)
     if lr is None:
         flags.append("sagittal_ref_fallback")
         lr = unit(np.array([1.0, 0.0, 0.0]))
@@ -66,11 +76,13 @@ def vertebral_axial_rotation_from_label(label, affine, level: str, label_ids: Di
         "method_version": METHOD_VERSION, "supine_ct": True,
     }
 
-    m = largest_component(binary_mask(label, label_ids[level]))
-    if not m.any():
-        flags.append(f"missing_label:{level}")
-        return result
-    body = isolate_vertebral_body(m, affine, erosion_mm=erosion_mm)
+    body = body_mask
+    if body is None:
+        m = largest_component(binary_mask(label, label_ids[level]))
+        if not m.any():
+            flags.append(f"missing_label:{level}")
+            return result
+        body = isolate_vertebral_body(m, affine, erosion_mm=erosion_mm)
     if not body.any():
         flags.append(f"body_isolation_failed:{level}")
         return result

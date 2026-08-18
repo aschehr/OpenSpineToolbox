@@ -131,13 +131,20 @@ def endplate_footprint(body_points, normal_axis=WORLD_SUPERIOR, which: str = "su
 def endplate_footprint_from_label(label, affine, level: str, which: str,
                                   label_ids: Dict[str, int], *,
                                   sup_axis=WORLD_SUPERIOR, lr=(1.0, 0.0, 0.0),
-                                  erosion_mm: float = 10.0) -> Optional[Dict]:
+                                  erosion_mm: float = 10.0, body_mask=None) -> Optional[Dict]:
     """Convenience: fit one endplate's footprint straight from a label volume
-    + structure name, isolating the vertebral body first."""
-    m = largest_component(binary_mask(label, label_ids[level]))
-    if not m.any():
-        return None
-    body_mask = isolate_vertebral_body(m, affine, erosion_mm=erosion_mm)
+    + structure name, isolating the vertebral body first.
+
+    `body_mask`: optional precomputed, already-isolated body mask (from
+    `isolate_vertebral_body`) -- pass this when calling for the SAME level
+    from multiple parameters on one case (e.g. `llif.llif_level_report_from_label`,
+    which also needs it for `vertebral_rotation`) so the expensive erosion
+    isn't redundantly recomputed. None (default) computes it."""
+    if body_mask is None:
+        m = largest_component(binary_mask(label, label_ids[level]))
+        if not m.any():
+            return None
+        body_mask = isolate_vertebral_body(m, affine, erosion_mm=erosion_mm)
     if not body_mask.any():
         return None
     pts = mask_world(body_mask, affine)
@@ -146,22 +153,28 @@ def endplate_footprint_from_label(label, affine, level: str, which: str,
 
 def disc_footprint_from_label(label, affine, upper_level: str, lower_level: str,
                               label_ids: Dict[str, int], *, case_id: str = "",
-                              sup_axis=WORLD_SUPERIOR, lr=(1.0, 0.0, 0.0)) -> Dict:
+                              sup_axis=WORLD_SUPERIOR, lr=(1.0, 0.0, 0.0),
+                              upper_body_mask=None, lower_body_mask=None) -> Dict:
     """Cage-sizing footprint for the disc space BETWEEN `upper_level` and
     `lower_level` (e.g. 'L4','L5' for the L4-L5 disc): the inferior endplate
     of the upper body and the superior endplate of the lower body -- the two
     surfaces that actually bound the disc space, reported separately (not
     averaged) since surgeons compare them, e.g. to undersize to the smaller.
 
+    `upper_body_mask`/`lower_body_mask`: optional precomputed, already-
+    isolated body masks -- see `endplate_footprint_from_label`'s docstring.
+
     Never silently drops a bad case: a missing/unfittable surface stays None
     with a qc_flags entry, mirroring the rest of ostk (SPEC §4)."""
     flags: list = []
     upper_fp = endplate_footprint_from_label(label, affine, upper_level, "inferior",
-                                             label_ids, sup_axis=sup_axis, lr=lr)
+                                             label_ids, sup_axis=sup_axis, lr=lr,
+                                             body_mask=upper_body_mask)
     if upper_fp is None:
         flags.append(f"missing_label:{upper_level}")
     lower_fp = endplate_footprint_from_label(label, affine, lower_level, "superior",
-                                             label_ids, sup_axis=sup_axis, lr=lr)
+                                             label_ids, sup_axis=sup_axis, lr=lr,
+                                             body_mask=lower_body_mask)
     if lower_fp is None:
         flags.append(f"missing_label:{lower_level}")
     if not flags:

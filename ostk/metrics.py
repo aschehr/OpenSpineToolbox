@@ -228,14 +228,17 @@ def lumbar_lordosis(endplate_normals: Dict[str, np.ndarray], lr_axis) -> Dict:
 
 
 def _endplate_normal_from_label(label, affine, level, which, sup_axis, frac,
-                                min_voxels):
+                                min_voxels, label_ids=None):
     """(unit normal oriented cranially, centroid, rms, n_points) for one vertebral
     endplate, or (None, …) if the level is absent / too small. Delegates to the
-    `ostk.spine.fit_endplate` primitive (anterior-body + true-surface fit)."""
+    `ostk.spine.fit_endplate` primitive (anterior-body + true-surface fit).
+    `label_ids`: optional explicit {name: id} map (real v4 data renumbers ids
+    relative to `ostk.labels`); falls back to `ostk.labels.lid()` when None."""
     from .labels import lid
     from .masks import binary_mask, largest_component, mask_world
     from .spine import corner_params_for_level
-    allpts = mask_world(largest_component(binary_mask(label, lid(level))), affine)
+    level_id = lid(level) if label_ids is None else label_ids[level]
+    allpts = mask_world(largest_component(binary_mask(label, level_id)), affine)
     if len(allpts) < min_voxels:
         return None, None, None, len(allpts)
     res = fit_endplate(allpts, sup_axis, which, min_points=min_voxels,
@@ -246,13 +249,18 @@ def _endplate_normal_from_label(label, affine, level, which, sup_axis, frac,
     return n, c, rms, len(allpts)
 
 
-def _lr_axis_from_label(label, affine, sup_axis, head_frac, min_voxels):
+def _lr_axis_from_label(label, affine, sup_axis, head_frac, min_voxels, label_ids=None):
     """Patient L–R (sagittal-plane normal) from the two femoral-head centres
     (bicoxofemoral vector, robust acetabular-interface fit). Returns (lr_unit, ok).
-    Falls back to the image X axis with ok=False if a femur is missing."""
-    L = femoral_head_center(label, affine, "femur_left", "left_hip",
+    Falls back to the image X axis with ok=False if a femur is missing.
+    `label_ids`: optional explicit {name: id} map, see `_endplate_normal_from_label`."""
+    fL, hL, fR, hR = ("femur_left", "left_hip", "femur_right", "right_hip")
+    if label_ids is not None:
+        fL, hL = label_ids[fL], label_ids[hL]
+        fR, hR = label_ids[fR], label_ids[hR]
+    L = femoral_head_center(label, affine, fL, hL,
                             sup_axis=sup_axis, slab_frac=head_frac, min_voxels=min_voxels)
-    R = femoral_head_center(label, affine, "femur_right", "right_hip",
+    R = femoral_head_center(label, affine, fR, hR,
                             sup_axis=sup_axis, slab_frac=head_frac, min_voxels=min_voxels)
     if L is None or R is None:
         return unit(np.array([1.0, 0.0, 0.0])), False
@@ -261,15 +269,23 @@ def _lr_axis_from_label(label, affine, sup_axis, head_frac, min_voxels):
 
 def lumbar_lordosis_from_label(label, affine, *, case_id: str = "",
                                sup_axis=WORLD_SUPERIOR, endplate_frac: float = 0.15,
-                               head_frac: float = 0.35, min_voxels: int = 30
-                               ) -> Measurement:
+                               head_frac: float = 0.35, min_voxels: int = 30,
+                               label_ids=None, lr=None) -> Measurement:
     """Compose lumbar lordosis from a v3 label volume. Sagittal plane is derived
     from the femoral heads (data-derived L–R axis, robust to scan tilt; SPEC §3);
     each endplate normal is a TLS fit to that body's cranial slab. Needs at least
     L1 + S1; missing intermediate levels are skipped (and flagged) so a
-    FOV-clipped scan still yields the L1–S1 Cobb where possible."""
+    FOV-clipped scan still yields the L1–S1 Cobb where possible.
+    `label_ids`: optional explicit {name: id} map (real v4 data renumbers ids
+    relative to `ostk.labels`); falls back to `ostk.labels.lid()` when None.
+    `lr`: optional precomputed patient L-R axis -- pass this when calling
+    alongside other parameters on the same case (e.g.
+    `llif.llif_level_report_from_label`) so the expensive femoral-head fit
+    isn't redundantly recomputed. None (default) computes it."""
     flags: list = []
-    lr, ok = _lr_axis_from_label(label, affine, sup_axis, head_frac, min_voxels)
+    ok = True
+    if lr is None:
+        lr, ok = _lr_axis_from_label(label, affine, sup_axis, head_frac, min_voxels, label_ids)
     if not ok:
         flags.append("sagittal_ref_fallback")          # used image X, not femurs
 
@@ -278,7 +294,7 @@ def lumbar_lordosis_from_label(label, affine, *, case_id: str = "",
     landmarks: Dict[str, list] = {}
     for lv in LL_ENDPLATE_CHAIN:
         n, c, rms, k = _endplate_normal_from_label(
-            label, affine, lv, "superior", sup_axis, endplate_frac, min_voxels)
+            label, affine, lv, "superior", sup_axis, endplate_frac, min_voxels, label_ids)
         if n is None:
             flags.append(f"missing_label:{lv}")
             continue
