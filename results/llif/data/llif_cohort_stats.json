@@ -1,0 +1,47 @@
+{
+  "crest_obliquity_mm": {
+    "p10": 0.8,
+    "p90": 12.8,
+    "n": 801
+  },
+  "disc_height_middle_mm": {
+    "p10": 2.96,
+    "p90": 8.8408,
+    "n": 99
+  },
+  "disc_footprint_ap_mismatch_pct": {
+    "p10": 0.0,
+    "p90": 11.496,
+    "n": 99
+  },
+  "disc_footprint_ml_mismatch_pct": {
+    "p10": 1.72,
+    "p90": 12.324,
+    "n": 99
+  },
+  "lateral_listhesis_abs_mm": {
+    "p10": 2.5578,
+    "p90": 23.3042,
+    "n": 99
+  },
+  "coronal_disc_angle_deg": {
+    "p10": 0.44,
+    "p90": 6.4396,
+    "n": 99
+  },
+  "adjacent_disc_height_ratio": {
+    "p10": 0.5859,
+    "p90": 2.3416,
+    "n": 99
+  },
+  "vertebral_rotation_abs_deg": {
+    "p10": -6.2573,
+    "p90": 6.8695,
+    "n": 100
+  },
+  "vertebral_wedge_ratio_dev": {
+    "p10": 1.0586,
+    "p90": 1.7867,
+    "n": 100
+  }
+}

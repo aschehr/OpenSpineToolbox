@@ -159,7 +159,11 @@ def disc_footprint_from_label(label, affine, upper_level: str, lower_level: str,
     `lower_level` (e.g. 'L4','L5' for the L4-L5 disc): the inferior endplate
     of the upper body and the superior endplate of the lower body -- the two
     surfaces that actually bound the disc space, reported separately (not
-    averaged) since surgeons compare them, e.g. to undersize to the smaller.
+    averaged) since surgeons compare them, e.g. to undersize to the smaller
+    -- plus `ap_mismatch_pct`/`ml_mismatch_pct`, the size difference between
+    them as a percentage of the larger: a real subsidence-risk factor when
+    the two bounding surfaces differ a lot in size (an undersized cage on
+    the larger surface, or overhang past the smaller one).
 
     `upper_body_mask`/`lower_body_mask`: optional precomputed, already-
     isolated body masks -- see `endplate_footprint_from_label`'s docstring.
@@ -177,6 +181,14 @@ def disc_footprint_from_label(label, affine, upper_level: str, lower_level: str,
                                              body_mask=lower_body_mask)
     if lower_fp is None:
         flags.append(f"missing_label:{lower_level}")
+
+    ap_mismatch_pct = ml_mismatch_pct = None
+    if upper_fp is not None and lower_fp is not None:
+        ap_hi, ap_lo = sorted([upper_fp["ap_width_mm"], lower_fp["ap_width_mm"]], reverse=True)
+        ml_hi, ml_lo = sorted([upper_fp["ml_width_mm"], lower_fp["ml_width_mm"]], reverse=True)
+        ap_mismatch_pct = round(100.0 * (ap_hi - ap_lo) / ap_hi, 2) if ap_hi > 1e-6 else None
+        ml_mismatch_pct = round(100.0 * (ml_hi - ml_lo) / ml_hi, 2) if ml_hi > 1e-6 else None
+
     if not flags:
         flags.append("ok")
     return {
@@ -184,6 +196,7 @@ def disc_footprint_from_label(label, affine, upper_level: str, lower_level: str,
         "level": f"{upper_level}-{lower_level}", "units": "mm",
         f"{upper_level}_inferior": upper_fp,
         f"{lower_level}_superior": lower_fp,
+        "ap_mismatch_pct": ap_mismatch_pct, "ml_mismatch_pct": ml_mismatch_pct,
         "qc_flags": flags,
         "method_version": METHOD_VERSION,
         "supine_ct": True,
