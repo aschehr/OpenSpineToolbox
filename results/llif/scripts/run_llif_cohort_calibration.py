@@ -21,7 +21,7 @@ SNAPSHOT = (
 )
 OUT_PATH = os.path.join(os.path.dirname(__file__), "llif_cohort_calibration_100case.jsonl")
 N_CASES = 100
-WORKERS = 6
+WORKERS = 3
 
 
 def verify_revision() -> None:

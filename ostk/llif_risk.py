@@ -65,6 +65,9 @@ _FLAG_SPECS: List[Tuple[str, Callable[[Dict], Optional[float]]]] = [
     ("vertebral_wedge_ratio_dev",
      lambda r: _max_dev_from_one([_get(r, "vertebral_wedging", lv, "wedge_ratio")
                                   for lv in (r.get("vertebral_wedging") or {})])),
+    ("pi_ll_mismatch_abs_deg", lambda r: _get(r, "pi_ll", "mismatch", "abs_pi_minus_ll")),
+    ("sagittal_slip_abs_mm",
+     lambda r: abs(v) if (v := _get(r, "sagittal_slip", "slip_mm")) is not None else None),
 ]
 
 
