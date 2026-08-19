@@ -23,11 +23,47 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List, Optional, Tuple
 
+from .crest_height_yang import YANG_CITATION
 from .disc_height import adjacent_disc_height_ratio_from_label
 from .geometry import WORLD_SUPERIOR
 from .llif import llif_level_report_from_label
 
 METHOD_VERSION = "llif-risk-v1"
+
+SCHWAB_CITATION = ("Schwab F, Ungar B, Blondel B, et al. Scoliosis Research Society-Schwab "
+                   "Adult Spinal Deformity Classification: A Validation Study. "
+                   "Neurosurgery. 2012;71(6):1189-1196.")
+
+# Separate from _FLAG_SPECS below on purpose: these are the ONLY flags tied
+# to a specific, human-verified citation with a validated cutoff/grade
+# (checked via a real literature search + the paper's actual Methods text
+# for Yang et al., not an AI-summarized guess -- see crest_height_yang.py's
+# module docstring for that verification trail). Every other geometric
+# parameter in this toolbox is real and internally consistent, but "outside
+# our own cohort's typical range" (below, `_FLAG_SPECS`) is a DIFFERENT,
+# weaker kind of claim than "a published study associated this specific
+# measurement with this specific outcome" -- conflating the two would
+# overstate what most of these parameters actually have behind them.
+_LITERATURE_FLAGS = [
+    {
+        "name": "yang_crest_height_above_12mm",
+        "citation": YANG_CITATION,
+        "finding": ("Iliac crest height >12mm above the L4-5 disc's ventral midpoint was "
+                   "associated with higher subsidence risk after L4-5 OLIF (ROC AUC 0.688, "
+                   "p=0.042; 43% vs. 10-19% subsidence across crest-height groups, p=0.01)."),
+        "value": lambda r: _get(r, "yang_crest_height", "value"),
+        "flagged": lambda r: _get(r, "yang_crest_height", "above_yang_12mm_cutoff"),
+    },
+    {
+        "name": "pi_ll_schwab_elevated",
+        "citation": SCHWAB_CITATION,
+        "finding": ("PI-LL mismatch >=10 degrees (SRS-Schwab modifier '+' or '++') indicates "
+                   "a sagittal-deformity severity grade at which single-level correction may "
+                   "not restore alignment on its own."),
+        "value": lambda r: _get(r, "pi_ll", "mismatch", "abs_pi_minus_ll"),
+        "flagged": lambda r: _get(r, "pi_ll", "schwab", "PI-LL") in ("+", "++"),
+    },
+]
 
 
 def _max_abs(values: List[Optional[float]]) -> Optional[float]:
@@ -69,6 +105,25 @@ _FLAG_SPECS: List[Tuple[str, Callable[[Dict], Optional[float]]]] = [
     ("sagittal_slip_abs_mm",
      lambda r: abs(v) if (v := _get(r, "sagittal_slip", "slip_mm")) is not None else None),
 ]
+
+
+def literature_flag_values(report: Dict) -> Dict:
+    """Evaluate the `_LITERATURE_FLAGS` (Yang et al. crest height, SRS-Schwab
+    PI-LL) against one case's report. Each entry carries its own citation
+    and the specific finding it's grounded in -- callers should surface
+    those directly rather than just a bare True/False, since "flagged" only
+    means something alongside the actual claim being cited."""
+    out: Dict = {}
+    for spec in _LITERATURE_FLAGS:
+        value = spec["value"](report)
+        flagged = spec["flagged"](report)
+        out[spec["name"]] = {
+            "value": round(float(value), 4) if value is not None else None,
+            "flagged": bool(flagged) if flagged is not None else None,
+            "citation": spec["citation"],
+            "finding": spec["finding"],
+        }
+    return out
 
 
 def flag_value(value: Optional[float], cohort_stats: Optional[Dict], name: str) -> Dict:
@@ -114,15 +169,22 @@ def llif_risk_flags_from_label(label, affine, upper_level: str, lower_level: str
              for name, extractor in _FLAG_SPECS}
 
     statuses = [f["status"] for f in flags.values()]
+    lit_flags = literature_flag_values(report)
     return {
         "case_id": case_id, "parameter": "llif_risk_flags",
         "level": f"{upper_level}-{lower_level}", "method_version": METHOD_VERSION,
+        "literature_flags": lit_flags,
+        "n_literature_flags_positive": sum(bool(f["flagged"]) for f in lit_flags.values()
+                                           if f["flagged"] is not None),
         "flags": flags,
         "n_outside_typical_range": sum(s in ("below_typical_range", "above_typical_range")
                                        for s in statuses),
         "n_within_typical_range": sum(s == "within_typical_range" for s in statuses),
         "n_not_calibrated": sum(s == "not_calibrated" for s in statuses),
         "note": ("Geometric screening aid only, NOT a treatment recommendation. "
+                "'literature_flags' are the ONLY flags tied to a specific, verified "
+                "published citation; 'flags' below are purely descriptive (outside "
+                "THIS toolbox's own cohort range), not a clinical risk claim. "
                 "'not_calibrated' parameters have no cohort reference range yet."),
         "raw_report": report,
         "supine_ct": True,

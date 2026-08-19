@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Tuple
 
 from .coronal_alignment import coronal_disc_angle_from_label, lateral_listhesis_from_label
 from .crest_height import crest_height_from_label
+from .crest_height_yang import yang_crest_height_from_label
 from .disc_height import disc_height_from_label
 from .endplate_footprint import disc_footprint_from_label, isolate_vertebral_body
 from .geometry import WORLD_SUPERIOR
@@ -149,6 +150,12 @@ def llif_level_report_from_label(label, affine, upper_level: str, lower_level: s
 
     if {upper_level, lower_level} == {"L4", "L5"}:
         report["crest_height"] = crest_height_from_label(
+            label, affine, label_ids, case_id=case_id, sup_axis=sup_axis)
+        # A DIFFERENT measurement from crest_height above (bilateral-crest-
+        # midpoint to disc-ventral-midpoint, not per-side/obliquity) --
+        # this one specifically replicates Yang et al. 2024's protocol so
+        # their validated 12mm subsidence cutoff applies to it, and only it.
+        report["yang_crest_height"] = yang_crest_height_from_label(
             label, affine, label_ids, case_id=case_id, sup_axis=sup_axis)
 
     return report
