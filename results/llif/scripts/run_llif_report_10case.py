@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, "/Users/ashleyschehr/OpenSpineToolbox")
 
@@ -25,19 +26,40 @@ CASE_IDS = ["0441", "0049", "0231", "0680", "0508", "0368", "0184", "0910", "065
 OUT_PATH = os.path.join(os.path.dirname(__file__), "llif_report_10case.jsonl")
 
 
-def verify_revision() -> None:
+def _json_default(o):
+    """Same numpy-safety net ostk.cli uses -- belt-and-suspenders on top of
+    the real fix (metrics.pi_ll_mismatch/schwab_sagittal_modifiers now cast
+    to native bool/float at the source)."""
+    import numpy as np
+    if isinstance(o, np.generic):
+        return o.item()
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+
+def verify_revision(retries: int = 3) -> None:
     assert os.path.isdir(SNAPSHOT), f"pinned snapshot missing on disk: {SNAPSHOT}"
-    remote = subprocess.run(
-        ["git", "ls-remote", "https://huggingface.co/datasets/anonymous-mlhc/CTSpinoPelvic1K"],
-        capture_output=True, text=True, timeout=30,
-    )
-    lines = [l for l in remote.stdout.splitlines() if "refs/heads/v4" in l]
-    assert lines, "could not read refs/heads/v4 from the remote"
-    remote_hash = lines[0].split()[0]
-    assert remote_hash == PINNED_REVISION, (
-        f"pinned revision {PINNED_REVISION} does not match remote v4 HEAD {remote_hash}"
-    )
-    print(f"revision verified: {PINNED_REVISION}", flush=True)
+    last_err = None
+    for attempt in range(retries):
+        try:
+            remote = subprocess.run(
+                ["git", "ls-remote", "https://huggingface.co/datasets/anonymous-mlhc/CTSpinoPelvic1K"],
+                capture_output=True, text=True, timeout=30,
+            )
+            lines = [l for l in remote.stdout.splitlines() if "refs/heads/v4" in l]
+            if not lines:
+                raise RuntimeError(f"could not read refs/heads/v4 from the remote "
+                                   f"(attempt {attempt+1}/{retries}); stderr={remote.stderr[:200]!r}")
+            remote_hash = lines[0].split()[0]
+            assert remote_hash == PINNED_REVISION, (
+                f"pinned revision {PINNED_REVISION} does not match remote v4 HEAD {remote_hash}"
+            )
+            print(f"revision verified: {PINNED_REVISION}", flush=True)
+            return
+        except (RuntimeError, subprocess.SubprocessError) as e:
+            last_err = e
+            if attempt < retries - 1:
+                time.sleep(3)
+    raise RuntimeError(f"revision verification failed after {retries} attempts: {last_err}")
 
 
 def main() -> None:
@@ -61,7 +83,7 @@ def main() -> None:
             label_path = os.path.join(SNAPSHOT, "labels", f"{case_id}_label.nii.gz")
             lab, aff = load_label(label_path)
             rec = llif_level_report_from_label(lab, aff, "L4", "L5", label_ids, case_id=case_id)
-            out_fh.write(json.dumps(rec) + "\n")
+            out_fh.write(json.dumps(rec, default=_json_default) + "\n")
             out_fh.flush()
             w = rec["vertebral_wedging"]
             print(f"{case_id}: listhesis={rec['lateral_listhesis']['value']}mm  "

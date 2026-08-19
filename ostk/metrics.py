@@ -138,7 +138,7 @@ def _pi_from_plane(m, n, ep_rms, cL, cR, sup_axis=WORLD_SUPERIOR,
 
 
 def _pi_from_label_core(label, affine, sup_axis, endplate_frac, head_frac,
-                        min_voxels):
+                        min_voxels, label_ids=None):
     """Extract the PI/SS/PT result dict from a v3 label volume (shared by the
     PI Measurement and the spinopelvic summary). The S1 superior endplate uses the
     shared `ostk.spine` endplate primitive (anterior band + true top-surface fit —
@@ -146,15 +146,23 @@ def _pi_from_label_core(label, affine, sup_axis, endplate_frac, head_frac,
     the true tilt instead of under-reading it with a flat slab). Femoral-head
     centres use the robust acetabular-interface sphere fit (`femoral_head_center`),
     not a cranial slab. `endplate_frac` is kept for signature compatibility but no
-    longer used. Returns (result_dict_or_None, flags)."""
+    longer used. `label_ids`: optional explicit {name: id} map (real v4 data
+    renumbers ids relative to `ostk.labels`); falls back to `ostk.labels.lid()`
+    when None. Returns (result_dict_or_None, flags)."""
     from .spine import endplate_from_label, endplate_overmask_midpoint_from_label
+
+    fL, hL, fR, hR = ("femur_left", "left_hip", "femur_right", "right_hip")
+    if label_ids is not None:
+        fL, hL = label_ids[fL], label_ids[hL]
+        fR, hR = label_ids[fR], label_ids[hR]
 
     flags: list = []
     ep_plane = endplate_from_label(label, affine, "S1", "superior",
-                                   normal_axis=sup_axis, min_points=min_voxels)
-    L = femoral_head_center(label, affine, "femur_left", "left_hip",
+                                   normal_axis=sup_axis, min_points=min_voxels,
+                                   label_ids=label_ids)
+    L = femoral_head_center(label, affine, fL, hL,
                             sup_axis=sup_axis, slab_frac=head_frac, min_voxels=min_voxels)
-    R = femoral_head_center(label, affine, "femur_right", "right_hip",
+    R = femoral_head_center(label, affine, fR, hR,
                             sup_axis=sup_axis, slab_frac=head_frac, min_voxels=min_voxels)
 
     if ep_plane is None:
@@ -171,7 +179,8 @@ def _pi_from_label_core(label, affine, sup_axis, endplate_frac, head_frac,
     # PI/PT radius origin = midpoint of the endplate portion over the body, on the rim
     # (more accurate than the corner-midpoint, which the anterior tangent skip biases
     # posterior). Orientation (n) is unchanged, so SS/LL are unaffected.
-    om = endplate_overmask_midpoint_from_label(label, affine, "S1", sup_axis, "superior")
+    om = endplate_overmask_midpoint_from_label(label, affine, "S1", sup_axis, "superior",
+                                               label_ids=label_ids)
     if om is not None:
         m = om
     r = _pi_from_plane(m, n, ep_rms, cL, cR, sup_axis, rL=rL, rR=rR, eL=eL, eR=eR)
@@ -183,12 +192,14 @@ def _pi_from_label_core(label, affine, sup_axis, endplate_frac, head_frac,
 def pelvic_incidence_from_label(label, affine, *, case_id: str = "",
                                 sup_axis=WORLD_SUPERIOR, endplate_frac: float = 0.15,
                                 head_frac: float = 0.35,
-                                min_voxels: int = 50) -> Measurement:
+                                min_voxels: int = 50, label_ids=None) -> Measurement:
     """Compose PI from a v3 label volume. Returns a Measurement with QC flags
     (never silently drops a bad case). SS/PT are available via
-    `spinopelvic_summary_from_label`."""
+    `spinopelvic_summary_from_label`. `label_ids`: optional explicit
+    {name: id} map (real v4 data renumbers ids relative to `ostk.labels`);
+    falls back to `ostk.labels.lid()` when None."""
     r, flags = _pi_from_label_core(label, affine, sup_axis, endplate_frac,
-                                   head_frac, min_voxels)
+                                   head_frac, min_voxels, label_ids)
     if r is None:
         return Measurement(case_id=case_id, parameter="pelvic_incidence",
                            value=None, qc_flags=flags,
@@ -335,13 +346,15 @@ def pi_ll_mismatch(pi: float, ll: float) -> Dict:
     """PI − LL mismatch (Greenberg: the dominant driver of sagittal imbalance).
     Objective is LL = PI ± 9°; surgical-target flag at |PI−LL| > 9°. Schwab
     PI–LL modifier: 0 (<10°), + (10–20°), ++ (>20°)."""
-    mm = pi - ll
+    mm = float(pi) - float(ll)  # native float: pi/ll are often numpy.float64 from
+                                # upstream fits, and numpy bool comparisons below
+                                # (np.bool_) aren't JSON-serializable like Python bool is
     return {
         "pi_minus_ll": round(mm, 3),
         "abs_pi_minus_ll": round(abs(mm), 3),
         "ll_target_deg": [round(pi - 9.0, 1), round(pi + 9.0, 1)],   # LL = PI ± 9°
-        "within_target_9deg": abs(mm) <= 9.0,          # Greenberg LL = PI ± 9°
-        "surgical_target": abs(mm) > 9.0,
+        "within_target_9deg": bool(abs(mm) <= 9.0),    # Greenberg LL = PI ± 9°
+        "surgical_target": bool(abs(mm) > 9.0),
         "schwab_modifier": _schwab_grade(abs(mm), 10.0, 20.0),
         "ll_shortfall_deg": round(max(mm - 9.0, 0.0), 3),  # LL increase to reach PI−9°
     }
@@ -380,15 +393,17 @@ def schwab_sagittal_modifiers(pi: float, ll: float, pt: float,
     """Full SRS-Schwab sagittal grading + Greenberg alignment objectives for one
     case. PT modifier: 0 (<20°), + (20–30°), ++ (>30°). SVA modifier: 0 (<4cm),
     + (4–9.5cm), ++ (>9.5cm) — only if `sva_cm` is supplied (out of scope on v3)."""
-    mm = pi - ll
+    mm = float(pi) - float(ll)  # see pi_ll_mismatch: native float, not numpy, so the
+                                # bool comparisons below are Python bool (JSON-safe)
+    pt = float(pt)
     return {
         "PI-LL": _schwab_grade(abs(mm), 10.0, 20.0),
         "PT": _schwab_grade(pt, 20.0, 30.0),
         "SVA": _schwab_grade(sva_cm, 4.0, 9.5) if sva_cm is not None else "out_of_scope",
         "objectives": {
-            "LL=PI±9°": abs(mm) <= 9.0,
-            "PT<20°": pt < 20.0,
-            "SVA<5cm": (sva_cm < 5.0) if sva_cm is not None else None,
+            "LL=PI±9°": bool(abs(mm) <= 9.0),
+            "PT<20°": bool(pt < 20.0),
+            "SVA<5cm": bool(sva_cm < 5.0) if sva_cm is not None else None,
         },
         "ll_increase_needed_deg": ll_increase_needed(pi, ll, pt),
     }

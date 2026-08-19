@@ -240,16 +240,24 @@ def endplate_overmask_midpoint(points, normal_axis=WORLD_SUPERIOR, which: str = 
     return A + float((center - A) @ el) * el       # on the rim, at the over-mask centre
 
 
+def _resolve_id(name: str, label_ids):
+    """id for `name`: from an explicit {name: id} map if given (real v4 data
+    renumbers ids relative to `ostk.labels`), else `ostk.labels.lid()`."""
+    from .labels import lid
+    return lid(name) if label_ids is None else label_ids[name]
+
+
 def endplate_overmask_midpoint_from_label(label, affine, level: str,
                                           normal_axis=WORLD_SUPERIOR,
-                                          which: str = "superior", lr=(1.0, 0.0, 0.0)):
+                                          which: str = "superior", lr=(1.0, 0.0, 0.0),
+                                          label_ids=None):
     """`endplate_overmask_midpoint` straight from a label volume + structure name
-    (S1 falls back to the sacrum label)."""
-    from .labels import lid
+    (S1 falls back to the sacrum label). `label_ids`: optional explicit
+    {name: id} map, see `_resolve_id`."""
     from .masks import binary_mask, largest_component, mask_world
-    m = binary_mask(label, lid(level))
+    m = binary_mask(label, _resolve_id(level, label_ids))
     if level == "S1" and not m.any():
-        m = binary_mask(label, lid("sacrum"))
+        m = binary_mask(label, _resolve_id("sacrum", label_ids))
     pts = mask_world(largest_component(m), affine)
     return endplate_overmask_midpoint(pts, normal_axis, which, lr=lr,
                                       **corner_params_for_level(level))
@@ -257,15 +265,16 @@ def endplate_overmask_midpoint_from_label(label, affine, level: str,
 
 def endplate_from_label(label, affine, level: str, which: str = "superior",
                         normal_axis=WORLD_SUPERIOR, method: str = "corner",
-                        ap_band=(0.3, 0.9), lr=(1.0, 0.0, 0.0), min_points: int = 30):
+                        ap_band=(0.3, 0.9), lr=(1.0, 0.0, 0.0), min_points: int = 30,
+                        label_ids=None):
     """Convenience: fit an endplate straight from a label volume + structure name,
     with body-isolation params chosen for the level (tight for vertebrae, loose for
-    the sacrum). For S1 falls back to the sacrum label if the carved S1 is absent."""
-    from .labels import lid
+    the sacrum). For S1 falls back to the sacrum label if the carved S1 is absent.
+    `label_ids`: optional explicit {name: id} map, see `_resolve_id`."""
     from .masks import binary_mask, largest_component, mask_world
-    m = binary_mask(label, lid(level))
+    m = binary_mask(label, _resolve_id(level, label_ids))
     if level == "S1" and not m.any():
-        m = binary_mask(label, lid("sacrum"))
+        m = binary_mask(label, _resolve_id("sacrum", label_ids))
     pts = mask_world(largest_component(m), affine)
     return fit_endplate(pts, normal_axis, which, method=method, ap_band=ap_band,
                         lr=lr, min_points=min_points, **corner_params_for_level(level))
