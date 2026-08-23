@@ -57,6 +57,14 @@ def sagittal_slip_from_label(label, affine, upper_level: str, lower_level: str,
     Never silently drops a bad case: missing/unfittable input -> value None
     plus a qc_flags entry (SPEC §4)."""
     flags: list = []
+    if lr is None:
+        # Mirrors vertebral_rotation/coronal_alignment's guard: a caller
+        # threading through a precomputed `_lr_axis` result (e.g.
+        # llif_level_report_from_label, when femoral heads/hips couldn't be
+        # fit) can hand us None here -- fall back to the identity axis and
+        # flag it rather than crashing in anterior_axis's np.cross.
+        flags.append("sagittal_ref_fallback")
+        lr = unit(np.array([1.0, 0.0, 0.0]))
     upper = endplate_corner_landmarks(label, affine, upper_level, "inferior", label_ids,
                                       sup_axis=sup_axis, lr=lr)
     if upper is None:
