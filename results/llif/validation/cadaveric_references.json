@@ -1,0 +1,374 @@
+{
+  "_about": "Literature reference values for results/llif/scripts/build_cadaveric_validation_table.py. Every number below was checked on 2026-09-28 against the source named in its `verified_against` field; `verification_level` says whether that was the primary paper itself or a secondary paper reproducing it. Numbers whose primary could not be reached are marked `secondary_reproduction` and still need a check against the primary PDF before publication.",
+  "sources": {
+    "panjabi1992": {
+      "citation": "Panjabi MM, Goel V, Oxland T, Takata K, Duranceau J, Krag M, Price M. Human lumbar vertebrae. Quantitative three-dimensional anatomy. Spine. 1992;17(3):299-306.",
+      "doi": "10.1097/00007632-199203000-00010",
+      "pmid": "1566168",
+      "specimen": "cadaveric",
+      "design_verified_against": "primary full text (user-supplied scanned PDF, 2026-09-28), p. 299 Methods: 'Twelve fresh autopsy spine specimens (axis to last lumbar vertebra)'; mean age 46.3 (19-59) y; male/female 8/4; soft tissue completely removed; 3D morphometer; Table 2 footnote '*Mean +/- SEM'",
+      "dispersion": "SEM",
+      "n_per_level": 12,
+      "n_per_level_note": "12 specimens, all L1-L5 (primary Methods)"
+    },
+    "tan2002": {
+      "citation": "Tan SH, Teo EC, Chua HC. Quantitative three-dimensional anatomy of lumbar vertebrae in Singaporean Asians. Eur Spine J. 2002;11:152-158.",
+      "doi": "10.1007/s00586-001-0365-7",
+      "specimen": "cadaveric (3D digitiser)",
+      "design_verified_against": "primary abstract (Europe PMC): '60 lumbar vertebrae from 12 cadavers'; 'means and standard errors'",
+      "dispersion": "SEM",
+      "n_per_level": 12
+    },
+    "berry1987": {
+      "citation": "Berry JL, Moran JM, Berg WS, Steffee AD. A morphometric study of human lumbar and selected thoracic vertebrae. Spine. 1987;12(4):362-367.",
+      "doi": "10.1097/00007632-198705000-00010",
+      "specimen": "dry bone (Hamann-Todd Osteological Collection)",
+      "design_verified_against": "primary abstract (Europe PMC): 'prepared spinal columns from 30 skeletons belonging to the Hamann-Todd Osteological Collection'",
+      "dispersion": "unstated",
+      "dispersion_note": "abstract does not say SD vs SEM, so no standardized difference is computed against Berry",
+      "n_per_level": 30
+    },
+    "weinberg2016": {
+      "citation": "Weinberg DS, Morris WZ, Gebhart JJ, Liu RW. Pelvic incidence: an anatomic investigation of 880 cadaveric specimens. Eur Spine J. 2016;25(11):3589-3595.",
+      "doi": "10.1007/s00586-015-4317-z",
+      "pmid": "26538158",
+      "specimen": "dry bone (Hamann-Todd Osteological Collection), reconstructed pelvis",
+      "design_verified_against": "primary abstract (Europe PMC)",
+      "dispersion": "SD",
+      "dispersion_note": "abstract reports '46.0 +/- 11.0' without naming it; with n=880 a +/-11 deg SEM is impossible, so it is SD",
+      "n_per_level": 880
+    },
+    "can2024": {
+      "citation": "Can H, Ozturk O, Civelek E, Dogu H, Boyali O, Kucuk C, Aydoseli A, Sencer A. A Morphometric Study of Cadavers for the Anterior Approach to the Lower Lumbar Spine. Turk Neurosurg. 2024;34(4):640-646.",
+      "doi": "10.5137/1019-5149.jtn.43447-23.2",
+      "pmid": "38874242",
+      "specimen": "fresh cadaveric",
+      "design_verified_against": "primary abstract (Europe PMC): '13 fresh human cadavers'; 'presented as mean and standard deviation'",
+      "dispersion": "SD",
+      "n_per_level": 13
+    },
+    "pluemvitayaporn2025": {
+      "citation": "Pluemvitayaporn T, Tadee S, Kunakornsawat S, et al. What Is the Suitable Wide Cage Size for Stand-alone LLIF in Asian Population: A Computed Tomography Scan-Based Study of a Dimension of Lumbar Endplate. Asian J Neurosurg. 2025;20(1):119-125.",
+      "doi": "10.1055/s-0044-1796668",
+      "pmid": "40041582",
+      "pmcid": "PMC11875720",
+      "specimen": "CT, living patients (NOT cadaveric; same-modality comparator)",
+      "design_verified_against": "primary full text (Europe PMC): 91 CT scans, 52 M / 39 F, 'mean and standard deviation (SD)'; IVDH = 'maximum distance of the intervertebral disc'",
+      "dispersion": "SD",
+      "n_per_level": 91
+    }
+  },
+  "references": [
+    {
+      "parameter": "L4 inferior endplate ML width",
+      "our_path": [
+        "disc_footprint",
+        "L4_inferior",
+        "ml_width_mm"
+      ],
+      "units": "mm",
+      "comparability": "good",
+      "comparability_note": "bony dimension; our value is the bounding-box width of the segmented, body-isolated endplate surface",
+      "values": [
+        {
+          "source": "panjabi1992",
+          "mean": 49.5,
+          "dispersion_value": 1.38,
+          "verification_level": "primary",
+          "verified_against": "Panjabi 1992 Table 2, p. 301 (EPWl, L4); matches PMC11875720 Table 2 reproduction (which rounds the SEM)"
+        },
+        {
+          "source": "tan2002",
+          "mean": 53.3,
+          "dispersion_value": 0.6,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (IVEW, L4)"
+        },
+        {
+          "source": "berry1987",
+          "mean": 50.9,
+          "dispersion_value": 4.6,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (IVEW, L4)"
+        },
+        {
+          "source": "pluemvitayaporn2025",
+          "mean": 49.3,
+          "dispersion_value": 4.0,
+          "male": [
+            51.3,
+            3.4
+          ],
+          "female": [
+            46.6,
+            3.2
+          ],
+          "verification_level": "primary",
+          "verified_against": "PMC11875720 Table 1 (IVEW, L4)"
+        }
+      ]
+    },
+    {
+      "parameter": "L4 inferior endplate AP depth",
+      "our_path": [
+        "disc_footprint",
+        "L4_inferior",
+        "ap_width_mm"
+      ],
+      "units": "mm",
+      "comparability": "good",
+      "comparability_note": "bony dimension",
+      "values": [
+        {
+          "source": "panjabi1992",
+          "mean": 33.9,
+          "dispersion_value": 0.85,
+          "verification_level": "primary",
+          "verified_against": "Panjabi 1992 Table 2, p. 301 (EPDl, L4); matches PMC11875720 Table 2 reproduction (which rounds the SEM)"
+        },
+        {
+          "source": "tan2002",
+          "mean": 35.6,
+          "dispersion_value": 0.7,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (IVED, L4)"
+        },
+        {
+          "source": "berry1987",
+          "mean": 35.6,
+          "dispersion_value": 3.1,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (IVED, L4)"
+        },
+        {
+          "source": "pluemvitayaporn2025",
+          "mean": 34.6,
+          "dispersion_value": 3.0,
+          "male": [
+            35.8,
+            3.1
+          ],
+          "female": [
+            32.9,
+            1.9
+          ],
+          "verification_level": "primary",
+          "verified_against": "PMC11875720 Table 1 (IVED, L4)"
+        }
+      ]
+    },
+    {
+      "parameter": "L5 superior endplate ML width",
+      "our_path": [
+        "disc_footprint",
+        "L5_superior",
+        "ml_width_mm"
+      ],
+      "units": "mm",
+      "comparability": "good",
+      "comparability_note": "bony dimension",
+      "values": [
+        {
+          "source": "panjabi1992",
+          "mean": 47.3,
+          "dispersion_value": 1.2,
+          "verification_level": "primary",
+          "verified_against": "Panjabi 1992 Table 2, p. 301 (EPWu, L5); matches PMC11875720 Table 2 reproduction (which rounds the SEM)"
+        },
+        {
+          "source": "tan2002",
+          "mean": 48.9,
+          "dispersion_value": 0.4,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (SVEW, L5)"
+        },
+        {
+          "source": "berry1987",
+          "mean": 53.4,
+          "dispersion_value": 4.4,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (SVEW, L5)"
+        },
+        {
+          "source": "pluemvitayaporn2025",
+          "mean": 48.8,
+          "dispersion_value": 4.2,
+          "male": [
+            50.8,
+            3.6
+          ],
+          "female": [
+            46.1,
+            3.4
+          ],
+          "verification_level": "primary",
+          "verified_against": "PMC11875720 Table 1 (SVEW, L5)"
+        }
+      ]
+    },
+    {
+      "parameter": "L5 superior endplate AP depth",
+      "our_path": [
+        "disc_footprint",
+        "L5_superior",
+        "ap_width_mm"
+      ],
+      "units": "mm",
+      "comparability": "good",
+      "comparability_note": "bony dimension",
+      "values": [
+        {
+          "source": "panjabi1992",
+          "mean": 34.7,
+          "dispersion_value": 1.17,
+          "verification_level": "primary",
+          "verified_against": "Panjabi 1992 Table 2, p. 301 (EPDu, L5); matches PMC11875720 Table 2 reproduction (which rounds the SEM)"
+        },
+        {
+          "source": "tan2002",
+          "mean": 35.8,
+          "dispersion_value": 0.6,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (SVED, L5)"
+        },
+        {
+          "source": "berry1987",
+          "mean": 35.1,
+          "dispersion_value": 2.8,
+          "verification_level": "secondary_reproduction",
+          "verified_against": "PMC11875720 Table 2 (SVED, L5)"
+        },
+        {
+          "source": "pluemvitayaporn2025",
+          "mean": 34.5,
+          "dispersion_value": 3.5,
+          "male": [
+            35.8,
+            3.2
+          ],
+          "female": [
+            32.9,
+            3.3
+          ],
+          "verification_level": "primary",
+          "verified_against": "PMC11875720 Table 1 (SVED, L5)"
+        }
+      ]
+    },
+    {
+      "parameter": "L4 posterior vertebral body height",
+      "our_path": [
+        "vertebral_wedging",
+        "L4",
+        "posterior_height_mm"
+      ],
+      "units": "mm",
+      "comparability": "good",
+      "comparability_note": "bony dimension; ours is the superior-inferior gap between the body's own posterior endplate corners",
+      "values": [
+        {
+          "source": "panjabi1992",
+          "mean": 24.1,
+          "dispersion_value": 1.1,
+          "verification_level": "primary",
+          "verified_against": "Panjabi 1992 Table 2, p. 301 (VBHp, L4)"
+        }
+      ]
+    },
+    {
+      "parameter": "L5 posterior vertebral body height",
+      "our_path": [
+        "vertebral_wedging",
+        "L5",
+        "posterior_height_mm"
+      ],
+      "units": "mm",
+      "comparability": "good",
+      "comparability_note": "bony dimension; ours is the superior-inferior gap between the body's own posterior endplate corners",
+      "values": [
+        {
+          "source": "panjabi1992",
+          "mean": 22.9,
+          "dispersion_value": 0.95,
+          "verification_level": "primary",
+          "verified_against": "Panjabi 1992 Table 2, p. 301 (VBHp, L5)"
+        }
+      ]
+    },
+    {
+      "parameter": "Pelvic incidence",
+      "our_path": [
+        "pi_ll",
+        "PI"
+      ],
+      "units": "deg",
+      "comparability": "good",
+      "comparability_note": "morphological, posture-independent; dry-bone reconstruction vs. our CT femoral-head/sacral-endplate fit",
+      "values": [
+        {
+          "source": "weinberg2016",
+          "mean": 46.0,
+          "dispersion_value": 11.0,
+          "male": [
+            45.8,
+            10.4
+          ],
+          "female": [
+            47.2,
+            13.8
+          ],
+          "verification_level": "primary",
+          "verified_against": "Weinberg 2016 abstract (Europe PMC)"
+        }
+      ]
+    },
+    {
+      "parameter": "L4-5 anterior disc height",
+      "our_path": [
+        "disc_height",
+        "anterior_mm"
+      ],
+      "units": "mm",
+      "comparability": "poor",
+      "comparability_note": "post-mortem discs lose water/height and were measured directly on the exposed anterior surface; agreement here does NOT validate our disc height",
+      "values": [
+        {
+          "source": "can2024",
+          "mean": 6.8,
+          "dispersion_value": 0.81,
+          "verification_level": "primary",
+          "verified_against": "Can 2024 abstract (Europe PMC)"
+        }
+      ]
+    },
+    {
+      "parameter": "L4-5 maximum disc height",
+      "our_path": "max(disc_height.anterior_mm, middle_mm, posterior_mm)",
+      "units": "mm",
+      "comparability": "moderate",
+      "comparability_note": "same modality (CT), living patients; their IVDH is the 'maximum distance of the intervertebral disc' on sagittal CT, so we compare our max of ant/mid/post",
+      "values": [
+        {
+          "source": "pluemvitayaporn2025",
+          "mean": 12.4,
+          "dispersion_value": 2.3,
+          "male": [
+            13.0,
+            2.2
+          ],
+          "female": [
+            11.5,
+            2.1
+          ],
+          "verification_level": "primary",
+          "verified_against": "PMC11875720 Table 1 (IVDH L4/L5)"
+        }
+      ]
+    }
+  ],
+  "not_referenced": {
+    "vertebral rotation, lateral listhesis, sagittal slip, coronal disc angle, LL, segmental lordosis, crest height": "patient-specific and/or posture-dependent -- no meaningful cadaveric reference exists.",
+    "vertebral HU": "post-mortem/fixation changes attenuation; cadaveric HU is not a reference for living-patient CT.",
+    "L4/L5 anterior vertebral body height": "Panjabi 1992 Table 2 reports posterior height (VBHp) only; no verified cadaveric anterior-height reference yet."
+  }
+}

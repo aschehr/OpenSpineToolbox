@@ -37,3 +37,52 @@ so an uncalibrated parameter is never silently treated as normal.
 
 `llif_risk.py` is explicitly a geometric screening aid, not a treatment
 recommendation — see its module docstring.
+
+## Cadaveric / literature validation (population-level)
+
+`validation/cadaveric_validation.{csv,md}` (built by
+`scripts/build_cadaveric_validation_table.py` from
+`validation/cadaveric_references.json`) compares the full-802 cohort's
+distributions against cadaveric morphometry (Panjabi 1992, Tan 2002, Berry
+1987, Weinberg 2016, Can 2024) plus one same-modality CT study
+(Pluemvitayaporn 2025). Only values whose sub-report passed QC are used.
+
+This is a **plausibility / systematic-bias check, not per-case
+validation** -- the specimens are different people from our patients.
+Every reference number carries a `verification_level`: `primary` (checked
+against the paper's own abstract/full text) or `secondary_reproduction`
+(the Tan/Berry per-level endplate values, checked only against
+PMC11875720 Table 2 because the primaries were unavailable). Panjabi 1992
+values were verified against the primary's Table 2 (p. 301) and match the
+PMC11875720 reproduction exactly (which rounds the SEMs).
+
+Findings (2026-09-28):
+
+- **Pelvic incidence agrees**: 48.5 vs. 46.0 deg (Weinberg, n=880 dry
+  pelves), SMD 0.23.
+- **Endplate footprint is systematically undersized** against every
+  reference, cadaveric and CT alike, in both sexes separately (so not a
+  sex-mix artifact): L4 inferior ML width -17% vs. Panjabi (SMD -1.9),
+  L5 superior AP depth -10%. Leading hypothesis, untested:
+  `isolate_vertebral_body`'s 10mm erode/dilate is a morphological opening
+  that shaves off the endplate rim (ring apophysis), which flares beyond
+  the body's waist and is <20mm thick. Separately, `llif.py` doesn't pass
+  `lr` to `disc_footprint_from_label`, so ML width is measured on the
+  scanner x-axis rather than the patient L-R axis (small effect).
+- **Disc height fails**: the "match" with Can 2024's cadaveric anterior
+  height (6.78 vs. 6.8mm) is coincidental -- post-mortem discs dehydrate,
+  and against same-modality CT maximum disc height our value is 39% low
+  (7.6 vs. 12.4mm), alongside 1-voxel (0.8mm) values and 51 cases with
+  identical ant/mid/post heights.
+- **Not validatable against cadavers**: rotation, listhesis, slip, coronal
+  angle, LL, crest height (patient/posture-specific) and HU (post-mortem
+  attenuation changes). Anterior body height has no verified cadaveric
+  reference (Panjabi reports posterior height only).
+- **Posterior vertebral body height reads tall**: L4 26.4 vs. 24.1mm, L5
+  24.9 vs. 22.9mm (Panjabi; +9%, SMD 0.54/0.44). Together with disc height
+  reading short, this is consistent with our endplate landmarks sitting
+  slightly into the disc space -- a hypothesis, not yet tested.
+- **Positioning caveat**: the manifest records 377/802 cases as prone and
+  3 as decubitus, but every record is marked `supine_ct: true`. Irrelevant
+  for bony morphology (endplates, PI), but it matters for posture-dependent
+  parameters (LL, PT, slip, crest height).
