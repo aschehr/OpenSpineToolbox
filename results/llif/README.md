@@ -21,6 +21,16 @@ as `results/crest-height/`).
   `results/crest-height/` (n=801) instead of this 100-case subset, since
   that full-cohort data already existed and is far more statistically
   robust; every other parameter is calibrated from n=99-100.
+- `data/vertebral_hu_10case.jsonl` — `vertebral_hu_from_label` output (L4
+  and L5, mean/median/SD HU + voxel count) for the same 10 manually-
+  validated cases, via `run_vertebral_hu_10case.py`. Mean HU ranges 87.6-
+  233.5 across the 10 cases (real between-patient spread), with L4≈L5
+  within each case except 0655 (132.3 vs. 183.1 -- not yet explained,
+  worth a manual look). This is the ONE parameter in this toolbox needing
+  the CT intensity volume, not just labels -- see `ostk/vertebral_hu.py`'s
+  module docstring for why its manual validation (point-sampling, not
+  point-landmark ICC/Pearson/kappa) is structurally different from every
+  other parameter here.
 - `scripts/` — the runners that produced the above. Same portability caveat
   as `results/crest-height/scripts/`: paths assume this repo checked out at
   `/Users/ashleyschehr/OpenSpineToolbox` with the pinned v4 snapshot cached
@@ -86,3 +96,26 @@ Findings (2026-09-28):
   3 as decubitus, but every record is marked `supine_ct: true`. Irrelevant
   for bony morphology (endplates, PI), but it matters for posture-dependent
   parameters (LL, PT, slip, crest height).
+
+### Footprint fix attempt (2026-09-28) -- reverted, not yet solved
+
+Axial-slice inspection confirmed the 3D erode/dilate in
+`isolate_vertebral_body` shaves the endplate rim (e.g. case 0441 L4
+inferior: ~33 vs. ~43mm body width 1.5mm from the endplate). Two fixes were
+tried and rejected on real data (not just synthetic phantoms):
+
+- **Slice-wise (2D) opening**: keeps the rim, but at L5 the pedicle +
+  transverse-process root is >20mm wide in-plane, so the pedicles survive
+  (first 42 cases: L5 superior ML 61 +/- 10mm, max 79mm, case 0051).
+- **Growing the 3D-opened body back by k mm (posterior-wall cutoff)**: no
+  plateau -- width keeps rising with k (0051 L5: 62/68/73mm at k=4/7/10)
+  because it picks up osteophytes and L5 transverse-process roots.
+
+Complication: this cohort is 50-89 years old, and marginal osteophytes are
+real bone that widens the segmented "endplate" (0051 L4 inferior is ~60mm
+wide at the rim). A correct fix needs an explicit definition (rim vs.
+osteophyte; osteophytes are usually resected, not cage-bearing) and a
+reference standard -- manual endplate measurements -- rather than tuning
+toward cadaveric means, which would make the cadaveric check circular.
+Until then the footprint stays on endplate-footprint-v3 with its known
+undersizing bias, and should not be used for cage sizing.

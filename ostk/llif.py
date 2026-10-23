@@ -11,6 +11,14 @@ methodology fix. Also not included: psoas/vessel-based corridor safety
 (Moro zone, vessel distance) -- those labels are still unpopulated in the
 v4 data as of the pinned revision (checked directly, empty in every case
 sampled).
+
+Vertebral HU (bone density) -- both the general-purpose `vertebral_hu`
+metric and the Zhou-et-al.-protocol-matched `zhou_l1_l4_bmd` -- is
+OPTIONAL here, unlike everything else in this report: it's the only pair
+of parameters needing the CT intensity volume, not just the label map, so
+they're only computed when a caller passes `ct` -- omitted (not a
+qc_flags failure) when they don't, since most callers so far only have
+labels loaded.
 """
 from __future__ import annotations
 
@@ -26,6 +34,8 @@ from .masks import binary_mask, largest_component
 from .metrics import (LL_ENDPLATE_CHAIN, _pi_from_label_core, lumbar_lordosis_from_label,
                       pi_ll_mismatch, schwab_sagittal_modifiers)
 from .spondylolisthesis import sagittal_slip_from_label
+from .vertebral_hu import vertebral_hu_from_label
+from .vertebral_hu_zhou import ZHOU_LEVELS, zhou_l1_l4_bmd_from_label
 from .vertebral_rotation import _lr_axis, vertebral_axial_rotation_from_label
 from .vertebral_wedging import vertebral_wedging_from_label
 
@@ -55,7 +65,7 @@ def _segmental_lordosis(ll_measurement, upper_level: str, lower_level: str
 
 def llif_level_report_from_label(label, affine, upper_level: str, lower_level: str,
                                  label_ids: Dict[str, int], *, case_id: str = "",
-                                 sup_axis=WORLD_SUPERIOR) -> Dict:
+                                 sup_axis=WORLD_SUPERIOR, ct=None) -> Dict:
     """One-call LLIF preop-planning summary for the disc space between
     `upper_level` and `lower_level` (e.g. 'L4','L5'): disc height (ant/mid/
     post), cage footprint (AP/ML at both bounding endplates), vertebral
@@ -64,7 +74,10 @@ def llif_level_report_from_label(label, affine, upper_level: str, lower_level: s
     segmental lordosis + PI-LL mismatch/Schwab modifiers (when on the
     L1-S1 chain), and -- only when the target IS L4-L5, since the crest
     only constrains access at that specific level -- iliac crest height,
-    the parameter this toolbox validated first.
+    the parameter this toolbox validated first. Also includes trabecular
+    HU/bone density for both levels, but ONLY if the caller passes `ct`
+    (the CT intensity volume, same grid as `label`) -- omitted otherwise,
+    since it's the one parameter here that needs more than the label map.
 
     PI-LL is composed manually from `metrics._pi_from_label_core` +
     `pi_ll_mismatch`/`schwab_sagittal_modifiers` here -- deliberately NOT
@@ -84,8 +97,9 @@ def llif_level_report_from_label(label, affine, upper_level: str, lower_level: s
     # this sharing was measured redundantly re-running the fit up to 4x and
     # the erosion up to 2x per level per case.
     lr = _lr_axis(label, affine, label_ids, sup_axis, 0.35, 50)
+    levels_needed = {upper_level, lower_level} | (set(ZHOU_LEVELS) if ct is not None else set())
     body_masks = {}
-    for lv in {upper_level, lower_level}:
+    for lv in levels_needed:
         m = largest_component(binary_mask(label, label_ids[lv]))
         body_masks[lv] = isolate_vertebral_body(m, affine, erosion_mm=10.0) if m.any() else None
 
@@ -157,5 +171,23 @@ def llif_level_report_from_label(label, affine, upper_level: str, lower_level: s
         # their validated 12mm subsidence cutoff applies to it, and only it.
         report["yang_crest_height"] = yang_crest_height_from_label(
             label, affine, label_ids, case_id=case_id, sup_axis=sup_axis)
+
+    if ct is not None:
+        report["vertebral_hu"] = {
+            upper_level: vertebral_hu_from_label(
+                label, ct, affine, upper_level, label_ids, case_id=case_id,
+                body_mask=body_masks[upper_level]),
+            lower_level: vertebral_hu_from_label(
+                label, ct, affine, lower_level, label_ids, case_id=case_id,
+                body_mask=body_masks[lower_level]),
+        }
+        # A DIFFERENT metric from vertebral_hu above (L1-L4 average via a
+        # three-axial-slice-per-vertebra protocol, not a single target
+        # level's whole-body 3D core) -- reconstructed to match Zhou et al.
+        # 2021's OLIF cage-subsidence protocol so their validated 115.7 HU
+        # cutoff applies to it, and only it. See vertebral_hu_zhou.py.
+        report["zhou_l1_l4_bmd"] = zhou_l1_l4_bmd_from_label(
+            label, ct, affine, label_ids, case_id=case_id, sup_axis=sup_axis,
+            body_masks={lv: body_masks[lv] for lv in ZHOU_LEVELS})
 
     return report

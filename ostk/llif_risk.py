@@ -27,6 +27,7 @@ from .crest_height_yang import YANG_CITATION
 from .disc_height import adjacent_disc_height_ratio_from_label
 from .geometry import WORLD_SUPERIOR
 from .llif import llif_level_report_from_label
+from .vertebral_hu_zhou import ZHOU_CITATION
 
 METHOD_VERSION = "llif-risk-v1"
 
@@ -62,6 +63,15 @@ _LITERATURE_FLAGS = [
                    "not restore alignment on its own."),
         "value": lambda r: _get(r, "pi_ll", "mismatch", "abs_pi_minus_ll"),
         "flagged": lambda r: _get(r, "pi_ll", "schwab", "PI-LL") in ("+", "++"),
+    },
+    {
+        "name": "zhou_l1_l4_bmd_below_115_7",
+        "citation": ZHOU_CITATION,
+        "finding": ("L1-L4 average vertebral body HU (\"BMD\") below 115.7 was associated with "
+                   "cage subsidence after stand-alone OLIF (AUC 0.909, 95% CI 0.834-0.984, "
+                   "P<0.001; 93.8% sensitivity, 81.7% specificity; n=76 patients, 84 segments)."),
+        "value": lambda r: _get(r, "zhou_l1_l4_bmd", "value"),
+        "flagged": lambda r: _get(r, "zhou_l1_l4_bmd", "below_zhou_115_7_cutoff"),
     },
 ]
 
@@ -149,10 +159,17 @@ def flag_value(value: Optional[float], cohort_stats: Optional[Dict], name: str) 
 def llif_risk_flags_from_label(label, affine, upper_level: str, lower_level: str,
                                label_ids: Dict[str, int], *, case_id: str = "",
                                sup_axis=WORLD_SUPERIOR,
-                               cohort_stats: Optional[Dict] = None) -> Dict:
+                               cohort_stats: Optional[Dict] = None, ct=None) -> Dict:
     """Geometric screening summary for the `upper_level`-`lower_level` disc
     space: every parameter this toolbox computes for that level, each
     compared to a cohort reference range when one is available.
+
+    `ct`: optional CT intensity volume (same grid as `label`, e.g.
+    `ostk.io.load_ct`). Only when provided are the two HU/bone-density
+    parameters computed at all, and only then can `zhou_l1_l4_bmd_below_115_7`
+    (the third literature flag) fire -- without `ct`, that flag's
+    `value`/`flagged` are just None (bone density has no cohort-percentile
+    fallback in `_FLAG_SPECS`, only the literature cutoff).
 
     Deliberately returns a per-parameter STATUS BREAKDOWN and a count, not
     a single yes/no verdict -- this pipeline has no access to the clinical
@@ -161,7 +178,7 @@ def llif_risk_flags_from_label(label, affine, upper_level: str, lower_level: str
     geometric findings into one number would overstate what CT geometry
     alone can support."""
     report = llif_level_report_from_label(label, affine, upper_level, lower_level,
-                                          label_ids, case_id=case_id, sup_axis=sup_axis)
+                                          label_ids, case_id=case_id, sup_axis=sup_axis, ct=ct)
     report["adjacent_disc_height_ratio"] = adjacent_disc_height_ratio_from_label(
         label, affine, upper_level, lower_level, label_ids, case_id=case_id, sup_axis=sup_axis)
 
