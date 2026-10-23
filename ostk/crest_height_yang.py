@@ -114,7 +114,10 @@ def yang_crest_height_from_label(label, affine, label_ids: Dict[str, int], *,
         disc_ventral_mid = 0.5 * (l4["anterior_corner"] + l5["anterior_corner"])
         height = float((crest_ref - disc_ventral_mid) @ a)
         result["value"] = round(height, 3)
-        result["above_yang_12mm_cutoff"] = bool(height > YANG_SUBSIDENCE_CUTOFF_MM)
+        # Compare the reported (rounded) value, not the raw float: landmarks
+        # sit on voxel centres, so heights land exactly on the 12 mm cutoff
+        # often, and float noise (12.0000001) would otherwise flip the flag.
+        result["above_yang_12mm_cutoff"] = bool(result["value"] > YANG_SUBSIDENCE_CUTOFF_MM)
         result["landmarks_world_mm"] = {
             "bilateral_crest_midpoint": crest_ref.tolist(),
             "disc_ventral_midpoint": disc_ventral_mid.tolist(),
