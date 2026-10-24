@@ -5,21 +5,23 @@ from ostk import spine
 
 
 def _vertebra(center, tilt_deg, ap_extent=30.0, lr_extent=45.0, height=24.0,
-              n=6000, seed=0):
-    """A solid box vertebral BODY with its superior endplate tilted `tilt_deg`
-    about the L–R axis (anterior edge lower), plus a posterior 'spinous process'
-    spike that must NOT influence the endplate fit."""
-    rng = np.random.default_rng(seed)
-    # body in local coords: x=L-R, y=A-P, z=cranio-caudal
-    b = rng.uniform(-1, 1, size=(n, 3)) * np.array([lr_extent, ap_extent, height]) / 2
+              seed=0):
+    """A solid box vertebral BODY (DENSE 1 mm voxel grid, like a real mask) whose
+    superior endplate is tilted `tilt_deg` about the L–R axis, plus a posterior
+    'spinous process' spike that must NOT influence the endplate fit."""
+    gx = np.arange(-lr_extent / 2, lr_extent / 2)
+    gy = np.arange(-ap_extent / 2, ap_extent / 2)
+    gz = np.arange(-height / 2, height / 2)
+    b = np.stack(np.meshgrid(gx, gy, gz, indexing="ij"), -1).reshape(-1, 3)
     a = np.deg2rad(tilt_deg)
     R = np.array([[1, 0, 0],
                   [0, np.cos(a), -np.sin(a)],
                   [0, np.sin(a), np.cos(a)]])
     body = b @ R.T + np.asarray(center)
-    # posterior spike (−y), well below the endplate, off to one side
-    s = rng.uniform(-1, 1, size=(n // 4, 3)) * np.array([8, 10, 30])
-    s += np.array([0, -ap_extent * 0.9, -height * 0.2])
+    # posterior spike (−y), below the endplate
+    sx = np.arange(-6, 6); sy = np.arange(-12, 2); sz = np.arange(-28, 2)
+    s = np.stack(np.meshgrid(sx, sy, sz, indexing="ij"), -1).reshape(-1, 3)
+    s += np.array([0, -int(ap_extent * 0.75), -int(height * 0.3)])
     spike = s @ R.T + np.asarray(center)
     return np.vstack([body, spike])
 

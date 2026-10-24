@@ -102,6 +102,72 @@ def test_pt_modifier_boundaries():
     assert metrics.schwab_sagittal_modifiers(50, 48, 31)["PT"] == "++"
 
 
+def test_pi_ll_target_range():
+    assert metrics.pi_ll_mismatch(50.0, 46.0)["ll_target_deg"] == [41.0, 59.0]
+
+
+def test_pi_magnitude_category():
+    assert metrics.pi_magnitude_category(40) == "low"
+    assert metrics.pi_magnitude_category(45) == "average"
+    assert metrics.pi_magnitude_category(60) == "average"
+    assert metrics.pi_magnitude_category(61) == "high"
+
+
+def test_roussouly_type_from_ss():
+    assert metrics.roussouly_type_from_ss(32) == "1-2"
+    assert metrics.roussouly_type_from_ss(35) == "3"
+    assert metrics.roussouly_type_from_ss(45) == "3"
+    assert metrics.roussouly_type_from_ss(46) == "4"
+
+
+def test_surgical_recommendation_from_chapter():
+    # near-balanced (case 0003): ΔLL=(55.5-45.7-9)+(23.2-20)=4.0° -> interbody, no osteotomy
+    r = metrics.surgical_recommendation(55.5, 45.7, 23.2)
+    assert round(r["ll_to_restore_deg"], 1) == 4.0
+    assert r["severity"] == "mild" and r["osteotomy"] is None
+    assert "interbody" in r["primary"].lower()
+
+    # fully balanced: ΔLL=0 -> no realignment, standalone feasible (PT<20)
+    bal = metrics.surgical_recommendation(50, 48, 12)
+    assert bal["ll_to_restore_deg"] == 0.0 and "no major realignment" in bal["primary"]
+    assert "standalone" in bal["fixation"]
+
+    # moderate need ΔLL=11 -> ACR (≤12°/level)
+    mod = metrics.surgical_recommendation(60, 42, 22)
+    assert mod["osteotomy"] == "ACR (anterior, ALL release)"
+
+    # severe ΔLL=46, |PI-LL|=40 -> PSO + open pelvic fixation
+    sev = metrics.surgical_recommendation(70, 30, 35)
+    assert sev["severity"] == "severe" and sev["osteotomy"] == "PSO"
+    assert "ilium" in sev["fixation"]
+
+
+def test_femoral_head_center_rejects_neck_and_shaft():
+    """The robust head fit must recover the spherical head centre despite the neck
+    and shaft, using the acetabular interface — and beat a naive whole-femur fit."""
+    from ostk.labels import lid
+    D = 96
+    ijk = np.argwhere(np.ones((D, D, D), dtype=bool)).astype(float)
+    label = np.zeros((D, D, D), dtype=np.int32); flat = label.reshape(-1)
+    Chead = np.array([40.0, 48.0, 60.0]); R = 12.0
+    # femur = head ball + neck/shaft cylinder running infero-laterally
+    head = np.linalg.norm(ijk - Chead, axis=1) <= R
+    axisv = g.unit(np.array([1.0, 0.0, -1.5]))
+    d = (ijk - Chead) @ axisv
+    inplane = np.linalg.norm((ijk - Chead) - np.outer(d, axisv), axis=1)
+    shaft = (d >= 0) & (d <= 40) & (inplane <= 6.0)
+    flat[head | shaft] = lid("femur_left")
+    # acetabulum = thin shell hugging the superior head surface (the socket)
+    rr = np.linalg.norm(ijk - Chead, axis=1)
+    flat[(rr > R + 0.5) & (rr <= R + 3.0) & (ijk[:, 2] > Chead[2])] = lid("left_hip")
+
+    c, r, rms = metrics.femoral_head_center(label, np.eye(4), "femur_left", "left_hip")
+    assert np.linalg.norm(c - Chead) < 3.0          # recovered the head centre
+    assert abs(r - R) < 3.0 and rms < 4.0           # anatomic radius, tight shell fit
+    cn, _, _ = g.fit_sphere(ijk[head | shaft])      # naive fit is dragged toward shaft
+    assert np.linalg.norm(c - Chead) < np.linalg.norm(cn - Chead)
+
+
 # --- end-to-end from a synthetic label volume ------------------------------
 
 def _ball(grid_pts, center, radius):
@@ -151,3 +217,167 @@ def test_lumbar_lordosis_from_label_phantom_plumbing():
     assert m.value is not None and 5.0 < m.value < 80.0        # plausible, lordotic
     segs = m.landmarks_world_mm["per_segment_lordosis_deg"]
     assert len(segs) == len(metrics.LL_ENDPLATE_CHAIN) - 1
+
+
+def _phantom_spine(D=96):
+    """Femurs (-> L-R axis) + lordotic L1..S1 bodies on an identity grid."""
+    from ostk.labels import lid
+    ijk = np.argwhere(np.ones((D, D, D), dtype=bool)).astype(float)
+    label = np.zeros((D, D, D), dtype=np.int32)
+    flat = label.reshape(-1)
+    flat[_ball(ijk, np.array([22.0, 48.0, 22.0]), 13.0)] = lid("femur_left")
+    flat[_ball(ijk, np.array([74.0, 48.0, 22.0]), 13.0)] = lid("femur_right")
+    tilts = np.linspace(12.0, -18.0, len(metrics.LL_ENDPLATE_CHAIN))
+    zs = np.linspace(80.0, 40.0, len(metrics.LL_ENDPLATE_CHAIN))
+    for lv, t, z in zip(metrics.LL_ENDPLATE_CHAIN, tilts, zs):
+        a = np.deg2rad(t)
+        normal = np.array([0.0, np.sin(a), np.cos(a)])
+        flat[_body(ijk, np.array([48.0, 48.0, z]), normal)] = lid(lv)
+    return label
+
+
+def test_simulate_correction_adds_lordosis_pelvis_fixed():
+    """Phase-1 post-op synthesis: rotating the segment at/above L3 by Δ° must raise
+    the re-measured LL by ~Δ while the pelvis (PI/SS/PT) is untouched — so PI−LL
+    (the surgical target) improves by ~Δ."""
+    from ostk import surgery
+    label, A = _phantom_spine(), np.eye(4)
+    pre = metrics.spinopelvic_summary_from_label(label, A, case_id="pre")
+    assert pre["LL"] is not None and pre["PI"] is not None
+
+    DELTA = 12.0
+    out = surgery.simulate_correction(label, A, "L3", DELTA)
+    post = metrics.spinopelvic_summary_from_label(out, A, case_id="post")
+
+    assert abs((post["LL"] - pre["LL"]) - DELTA) < 3.0          # LL += Δ
+    assert abs(post["PI"] - pre["PI"]) < 1.0                    # pelvis fixed
+    assert abs(post["SS"] - pre["SS"]) < 1.0
+    assert abs(post["PT"] - pre["PT"]) < 1.0
+    improved = pre["PI-LL"]["pi_minus_ll"] - post["PI-LL"]["pi_minus_ll"]
+    assert improved > DELTA - 3.0                               # PI−LL closes by ~Δ
+
+
+def test_simulate_correction_technique_reconciliation():
+    """Phase-2 hinge mechanics: an interbody/ALIF inserts a cage in the opened disc;
+    a PSO does not. Both still add lordosis (angle is fulcrum-independent)."""
+    from ostk import surgery
+    label, A = _phantom_spine(), np.eye(4)
+    pre = metrics.spinopelvic_summary_from_label(label, A)
+
+    alif = surgery.simulate_correction(label, A, "L3", 12.0, technique="alif")
+    pso = surgery.simulate_correction(label, A, "L3", 12.0, technique="pso")
+
+    assert int((alif == surgery.CAGE_ID).sum()) > 0            # cage placed in the disc
+    assert int((pso == surgery.CAGE_ID).sum()) == 0            # PSO: no cage
+
+    for out in (alif, pso):
+        post = metrics.spinopelvic_summary_from_label(out, A)
+        assert (post["LL"] - pre["LL"]) > 12.0 - 4.0           # lordosis added
+        assert abs(post["PI"] - pre["PI"]) < 1.5               # pelvis fixed
+
+
+def test_predict_compensated_alignment_exact():
+    """Phase-2.5 analytic: re-posturing about the hips keeps PI (=PT+SS), drives PT to
+    the target, and raises SS by the released amount; no-op when already balanced."""
+    from ostk import surgery
+    r = surgery.predict_compensated_alignment(pi=55.0, pt=30.0, target_pt=20.0)
+    assert r["PT"] == 20.0 and r["SS"] == 35.0 and r["pelvic_rotation_deg"] == 10.0
+    assert r["PT"] + r["SS"] == 55.0                            # PI conserved
+    bal = surgery.predict_compensated_alignment(pi=50.0, pt=12.0, target_pt=20.0)
+    assert bal["PT"] == 12.0 and bal["pelvic_rotation_deg"] == 0.0   # nothing to release
+
+
+def test_compensate_pelvis_voxel_releases_retroversion():
+    """Phase-2.5 voxel helper drives PT DOWN toward the target (exact angle landing is
+    validated analytically above; the voxel rotation is for the Phase-3 image and is
+    lossy at phantom resolution, so this only checks direction + the no-op guard)."""
+    from ostk import surgery
+    label, A = _phantom_spine(), np.eye(4)
+    pre = metrics.spinopelvic_summary_from_label(label, A)
+    out = surgery.compensate_pelvis(label, A, target_pt=pre["PT"] - 6.0)
+    post = metrics.spinopelvic_summary_from_label(out, A)
+    assert post["PT"] < pre["PT"] - 2.0                         # retroversion released
+    same = surgery.compensate_pelvis(label, A, target_pt=pre["PT"] + 5.0)   # already below
+    assert np.array_equal(same, label)                          # no-op guard
+
+
+def test_bend_spine_smooth_correction():
+    """Phase-3 distributed bend: a graduated extension adds lordosis smoothly (no kink),
+    leaves the pelvis ~fixed, and stays finite — same field applies to label and CT."""
+    from ostk import surgery
+    label, A = _phantom_spine(), np.eye(4)
+    pre = metrics.spinopelvic_summary_from_label(label, A)
+    bent = surgery.bend_spine(label, A, 12.0, label_for_axes=label, order=0)
+    assert bent.shape == label.shape and np.all(np.isfinite(bent))
+    post = metrics.spinopelvic_summary_from_label(bent, A)
+    assert post["LL"] > pre["LL"] + 4.0           # lordosis added (distributed)
+    assert abs(post["PI"] - pre["PI"]) < 3.0      # pelvis ~fixed (below S1)
+
+
+def test_warp_ct_bone_follows_labels_and_cage():
+    """Phase-3: the warped CT carries bone HU into the rotated mobile-vertebra labels,
+    leaves the fixed pelvis bone in place, stays finite, and stamps the cage."""
+    from ostk import surgery
+    label, A = _phantom_spine(), np.eye(4)
+    ct = np.where(label > 0, 300.0, -50.0).astype(np.float32)   # bone=300 HU, soft=-50
+    post = surgery.simulate_correction(label, A, "L3", 12.0, technique="alif")
+    warped = surgery.warp_ct(ct, label, A, "L3", 12.0, technique="alif", postop_label=post)
+
+    assert warped.shape == ct.shape and np.all(np.isfinite(warped))
+    moved = np.isin(post, [1, 2, 3])                            # rotated L1–L3 labels
+    assert warped[moved].mean() > 150.0                         # bone HU followed the labels
+    s1 = label == 7
+    assert abs(warped[s1].mean() - ct[s1].mean()) < 40.0        # fixed S1 bone unmoved
+    assert int((warped[post == surgery.CAGE_ID] == 250.0).sum()) > 0   # cage stamped
+
+
+def test_age_adjusted_targets_lafage():
+    """Phase-4: Lafage age-adjusted ideals — at the 55-yr anchor PI−LL=3, PT=20,
+    SVA=25 mm; the ideal LOOSENS with age (older → larger PI−LL, PT, SVA)."""
+    from ostk import surgery
+    a55 = surgery.age_adjusted_targets(pi=55.0, age=55.0)
+    assert a55["PI-LL"] == 3.0 and a55["PT"] == 20.0 and a55["SVA_mm"] == 25.0
+    assert a55["LL"] == 52.0                                    # PI − (PI−LL)
+    young, old = surgery.age_adjusted_targets(55.0, 35.0), surgery.age_adjusted_targets(55.0, 75.0)
+    assert young["PI-LL"] < a55["PI-LL"] < old["PI-LL"]        # loosens with age
+    assert young["PT"] < old["PT"] and young["SVA_mm"] < old["SVA_mm"]
+
+
+def test_plan_realignment_from_age():
+    """Phase-4 plan: ΔLL reaches the age-adjusted LL target, ΔTK is the reciprocal
+    fraction of ΔLL, anteversion releases retroversion toward the target PT (≥0)."""
+    from ostk import surgery
+    summ = {"PI": 60.0, "LL": 40.0, "PT": 28.0}
+    plan = surgery.plan_realignment(summ, age=50.0, reciprocal_k=0.5)
+    tgt = plan["targets"]
+    assert abs(plan["delta_ll"] - (tgt["LL"] - 40.0)) < 1e-6   # to the age target
+    assert abs(plan["delta_tk"] - 0.5 * plan["delta_ll"]) < 1e-6
+    assert plan["pelvic_antevert"] == round(28.0 - tgt["PT"], 2) >= 0
+    # already-flat spine: never ask for negative lordosis
+    flat = surgery.plan_realignment({"PI": 60.0, "LL": 70.0, "PT": 15.0}, age=50.0)
+    assert flat["delta_ll"] == 0.0 and flat["pelvic_antevert"] == 0.0
+
+
+def test_synthesize_postop_reciprocal_and_global():
+    """Phase-4 synthesis: lumbar lordosis is restored (LL += ~ΔLL) with PI invariant, and
+    a global anteversion drives PT DOWN — one finite field for label + CT. (The phantom's
+    femur balls sit slightly off the fitted bicoxofemoral axis, so a large anteversion
+    perturbs the re-fit; real spherical heads lie on the axis, so a modest angle here
+    keeps the rigid-rotation invariants without that artifact.)"""
+    from ostk import surgery
+    label, A = _phantom_spine(), np.eye(4)
+    pre = metrics.spinopelvic_summary_from_label(label, A)
+    out = surgery.synthesize_postop(label, A, label_for_axes=label, order=0,
+                                    delta_ll=12.0, delta_tk=6.0, pelvic_antevert=0.0)
+    assert out.shape == label.shape and np.all(np.isfinite(out))
+    post = metrics.spinopelvic_summary_from_label(out, A)
+    assert post["LL"] > pre["LL"] + 4.0                        # lordosis added
+    assert abs(post["PI"] - pre["PI"]) < 4.0                   # PI invariant (intrinsic)
+    g = metrics.spinopelvic_summary_from_label(
+        surgery.synthesize_postop(label, A, label_for_axes=label, order=0,
+                                  delta_ll=12.0, delta_tk=6.0, pelvic_antevert=3.0), A)
+    assert g["PT"] < post["PT"] - 0.5                          # anteversion released PT
+    # cross-grid warp: out_shape/out_affine produce that grid
+    small = surgery.synthesize_postop(label, A, label_for_axes=label, order=0, delta_ll=12.0,
+                                      out_affine=np.diag([2., 2., 2., 1.]), out_shape=(48, 48, 48))
+    assert small.shape == (48, 48, 48) and np.all(np.isfinite(small))

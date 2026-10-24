@@ -110,11 +110,50 @@ def signed_angle_in_plane(v1, v2, plane_normal, degrees: bool = True) -> float:
     return np.degrees(ang) if degrees else ang
 
 
+def project_to_plane_2d(points, origin, u_axis, v_axis) -> np.ndarray:
+    """Orthographic projection of world-mm points (or free vectors, using
+    origin=(0,0,0)) onto an explicit 2D basis (`u_axis`, `v_axis`) spanning a
+    plane. Returns the (u, v) coordinates -- shape (2,) for a single point/
+    vector or (N,2) for a point cloud. `u_axis`/`v_axis` are each independently
+    normalised; pass true orthonormal in-plane axes for the result to be a
+    faithful rigid 2D projection (e.g. a sagittal-plane anterior/cranial
+    basis -- see ostk.project2d.sagittal_axes)."""
+    P = np.asarray(points, dtype=np.float64)
+    o = np.asarray(origin, dtype=np.float64)
+    u, v = unit(u_axis), unit(v_axis)
+    rel = P - o
+    return np.stack([rel @ u, rel @ v], axis=-1)
+
+
 def cobb_angle(normal_a, normal_b, view_normal) -> float:
-    """Cobb angle (deg, unsigned) between two endplate planes *as seen in* the
-    viewing plane (normal `view_normal`): project both endplate normals into that
-    plane and take the angle between them — identical to drawing perpendiculars to
-    each endplate and measuring their intersection. Sagittal view (`view_normal` =
-    L–R axis) gives lordosis/kyphosis; coronal view (A–P axis) gives scoliosis."""
-    return angle_between(project_out(normal_a, view_normal),
-                         project_out(normal_b, view_normal))
+    """Cobb angle (deg) between two endplate PLANES as seen in the viewing plane
+    (normal `view_normal`): project both endplate normals into that plane and take
+    the angle between the planes — identical to drawing perpendiculars to each
+    endplate and measuring their intersection. Sagittal view (`view_normal` = L–R
+    axis) gives lordosis/kyphosis; coronal view (A–P axis) gives scoliosis.
+
+    Orientation-INDEPENDENT: it uses |cos| so the result is the acute dihedral
+    (0–90°) regardless of how each normal is oriented. This matters because
+    `ostk.spine.fit_endplate` returns OUTWARD normals (superior→cranial,
+    inferior→caudal); comparing a superior/inferior pair (e.g. vertebral wedging)
+    with the raw directed angle would give the supplement. Both endplates of a
+    realistic spinal angle are <90° apart, so the acute value is the true tilt."""
+    a = unit(project_out(normal_a, view_normal))
+    b = unit(project_out(normal_b, view_normal))
+    cos = abs(float(np.clip(a @ b, -1.0, 1.0)))
+    return float(np.degrees(np.arccos(cos)))
+
+
+def rotation_matrix(axis, theta_rad: float) -> np.ndarray:
+    """3×3 rotation by `theta_rad` about `axis` (right-hand rule), via Rodrigues.
+    Used to rotate a mobile spinal segment about the patient L–R axis when
+    synthesising a post-osteotomy correction (see ostk.surgery)."""
+    a = unit(axis)
+    x, y, z = a
+    c, s = float(np.cos(theta_rad)), float(np.sin(theta_rad))
+    C = 1.0 - c
+    return np.array([
+        [c + x * x * C,     x * y * C - z * s, x * z * C + y * s],
+        [y * x * C + z * s, c + y * y * C,     y * z * C - x * s],
+        [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
+    ])

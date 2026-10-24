@@ -1,0 +1,25 @@
+{
+  "n_cases_total": 802,
+  "n_age_present": 709,
+  "n_sex_present": 749,
+  "age_mean": 59.78,
+  "age_sd": 9.64,
+  "age_min": 50,
+  "age_max": 89,
+  "sex_counts": {
+    "male": 345,
+    "female": 393,
+    "other": 11
+  },
+  "sex_pct": {
+    "male": 46.1,
+    "female": 52.5,
+    "other": 1.5
+  },
+  "age_band_counts": {
+    "50-59": 357,
+    "60-69": 230,
+    "70-79": 82,
+    "80-89": 40
+  }
+}
